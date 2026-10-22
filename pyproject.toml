@@ -1,0 +1,28 @@
+[project]
+name = "valura"
+version = "0.1.0"
+description = "Valura Agno multi-agent market intelligence"
+requires-python = ">=3.12"
+dependencies = [
+    "agno",
+    "groq",
+    "openai",  # client library only: LiteLLM proxy is OpenAI-compatible (no OpenAI key used)
+    "yfinance",
+    "ddgs",
+    "python-dotenv",
+    "sqlalchemy[asyncio]",
+    "greenlet",
+    "psycopg[binary]",
+    "pgvector",
+    "pypdf",
+    "fastembed",
+    "matplotlib",
+    "pillow",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
