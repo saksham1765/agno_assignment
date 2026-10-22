@@ -20,10 +20,19 @@ A rejected approval means the tool never runs.
 ## Guardrails (`pre_hooks` on the Trader agent)
 
 1. `PIIDetectionGuardrail(mask_pii=True)` - SSN, card, email and phone numbers are replaced with `*` before the model sees them.
-2. `PromptInjectionGuardrail()` - known jailbreak phrases raise `InputCheckError`; the run ends with status `error` and no tool runs (fails closed).
-3. `TickerPermissionGuardrail` (custom, `app/hooks/guardrails.py`) - blocks any known ticker not in the user's allow-list.
+2. `PromptInjectionGuardrail()` - Agno's list of about 18 jailbreak phrases. A match ends the run with status `error`; no tool runs (fails closed).
+3. `StrongerInjectionGuardrail` (ours) - a wider phrase list, matched after lower-casing, swapping look-alike characters (`1gnore` becomes `ignore`) and squeezing spaces.
+4. `TickerPermissionGuardrail` (ours, `app/hooks/guardrails.py`) - blocks any known ticker, or company name such as "Tesla", that is not on the user's allow-list.
+   The list is read from `session_state["permitted_tickers"]` for each run, with the list given when the agent was built as the default.
 
-Limits: these are pattern checks, not a guarantee. The injection guardrail matches fixed phrases only.
+Limits: these are pattern checks, not a guarantee. A new jailbreak wording, or a company that is not in `COMPANY_NAMES`, gets through.
+The human confirmation step is the real protection, because no trade runs without a yes.
+
+## Trade safety
+
+`execute_trade` refuses (returns `REFUSED: ...`) a bad side, a quantity of 0 or less, a buy that costs more than the user's cash
+(`STARTING_CASH_USD` minus earlier buys plus sells), and a sell of more shares than the user holds. Trades are saved under the
+`user_id` of the run, at Yahoo Finance's latest price.
 
 ## Audit trail
 
@@ -34,4 +43,4 @@ It runs in the background only under AgentOS; a direct `agent.run()` executes it
 ## Not covered
 
 - No real authentication: "admin" is a fixed id in `admin.py`. Phase 11 adds JWT-based auth.
-- The ticker allow-list is passed when the agent is built, not read from `session_state` at run time.
+- Cash is a pretend balance (`STARTING_CASH_USD`); nothing is connected to a brokerage.

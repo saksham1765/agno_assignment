@@ -38,7 +38,9 @@ Ask your own question: `python scripts/ask.py "What should I know about NVDA?"` 
 
 ```powershell
 $env:PYTHONPATH="."
+python -m pytest tests -q            # 29 quick tests (guardrails, routing, trade rules)
 python scripts\audit_phases.py       # 64 checks: does the code match each assignment task?
+python scripts\clean_test_data.py    # show test rows in the database (add --yes to delete them)
 python scripts\prove_hybrid.py       # hybrid search vs vector-only vs keyword
 python scripts\prove_websearch.py    # web search reliability
 python scripts\prove_news_agent.py   # NewsAgent uses Yahoo Finance headlines
@@ -68,6 +70,5 @@ SECURITY.md      the three human-in-the-loop tiers
 | Real call audio and screenshot (Phase 6) | Computer-spoken clip and a drawn dashboard | No real files available. |
 | Full 10-K PDFs | First 40 pages (seed), 6 pages (agent ingest) | Keeps local embedding fast. |
 | OpenAI and Anthropic keys | LiteLLM proxy, Groq as fallback | Only these keys exist. |
-| Guardrail reads the allow-list from session_state | Allow-list is given when the agent is created | Agno guardrails cannot see session_state. |
 | Background hook never blocks | True under AgentOS only (see `prove_bg_hook.py`); a plain `agent.run()` runs it inline | That is how Agno schedules background hooks. |
 | `requires_user_input` HITL tier | Not used | The Phase 7 tasks only need confirmation and `@approval`. |
