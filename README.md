@@ -29,17 +29,30 @@ Every command prints its checks and ends with `... checks passed`.
 | 5 | Morning-briefing workflow (Parallel, Loop, Condition, early stop) | `python -m app.workflows.run_phase5` |
 | 6 | PDF, audio, chart and screenshot tools in one chat | `python scripts/make_sample_media.py` (once), then `python -m app.agents.multimodal` |
 | 7 | Human approval for trades, guardrails, audit log | `python -m app.agents.run_phase7` |
+| 8 | AgentOS server: UI, traces, AG-UI chat, Slack, `/webhooks/news` | `python -m app.server`, then `python scripts/prove_phase8.py` |
 
 Use `python` as `.\.venv\Scripts\python.exe` if the venv is not active.
 
 Ask your own question: `python scripts/ask.py "What should I know about NVDA?"` (`--phase 1|2|3`).
 
+## Phase 8: the server
+
+```powershell
+python -m app.server        # http://localhost:8000   (docs at /docs)
+```
+
+- **AgentOS UI:** open https://os.agno.com, add a Local OS at `http://localhost:8000`, chat, and open Traces.
+- **Browser chat (AG-UI):** `POST /agui`. Memory is kept per `user_id`.
+- **Slack:** off until `SLACK_TOKEN` and `SLACK_SIGNING_SECRET` are in `.env`. Steps are in `docs/slack_setup.md`.
+- **Webhook:** `curl -X POST http://localhost:8000/webhooks/news -H "Content-Type: application/json" -d '{"ticker":"NVDA"}'`
+
 ## Extra checks
 
 ```powershell
 $env:PYTHONPATH="."
-python -m pytest tests -q            # 29 quick tests (guardrails, routing, trade rules)
-python scripts\audit_phases.py       # 64 checks: does the code match each assignment task?
+python -m pytest tests -q            # 33 quick tests (guardrails, routing, trade rules, server)
+python scripts\audit_phases.py       # 74 checks: does the code match each assignment task?
+python scripts\prove_phase8.py       # starts a real server and checks traces, memory, Slack session, webhook, approvals
 python scripts\clean_test_data.py    # show test rows in the database (add --yes to delete them)
 python scripts\prove_hybrid.py       # hybrid search vs vector-only vs keyword
 python scripts\prove_websearch.py    # web search reliability
@@ -72,3 +85,5 @@ SECURITY.md      the three human-in-the-loop tiers
 | OpenAI and Anthropic keys | LiteLLM proxy, Groq as fallback | Only these keys exist. |
 | Background hook never blocks | True under AgentOS only (see `prove_bg_hook.py`); a plain `agent.run()` runs it inline | That is how Agno schedules background hooks. |
 | `requires_user_input` HITL tier | Not used | The Phase 7 tasks only need confirmation and `@approval`. |
+| Slack against a real bot, AgentOS UI at os.agno.com (Phase 8) | Code and docs are ready; only tested with a signed fake Slack event and a local server | Needs your Slack workspace and a browser. See `docs/slack_setup.md`. |
+| `fastapi dev` (Phase 8) | `python -m app.server` | Same server; the `fastapi` command also works. FastAPI is pinned to 0.115 because newer versions break Agno's approve/reject endpoint. |

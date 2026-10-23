@@ -174,6 +174,28 @@ check("P7 approvals include required AND audit types",
 check("P7 audit_log table (own) has rows", sql("select count(*) from ai.audit_log")[0][0] > 0)
 check("P7 SECURITY.md exists", os.path.exists("SECURITY.md"))
 
+# ---------------- Phase 8 ----------------
+import app.server as server  # noqa: E402
+
+check("P8 AgentOS has agents, teams and workflows",
+      len(server.agent_os.agents) >= 5 and len(server.agent_os.teams) == 3 and len(server.agent_os.workflows) == 1,
+      f"{len(server.agent_os.agents)} agents, {len(server.agent_os.teams)} teams, {len(server.agent_os.workflows)} workflows")
+check("P8 AgentOS has a db and tracing=True", server.agent_os.db is not None and server.agent_os.tracing is True)
+interface_names = [type(i).__name__ for i in server.interfaces]
+check("P8 AG-UI interface registered", "AGUI" in interface_names, str(interface_names))
+server_src = inspect.getsource(server)
+check("P8 Slack wired to the route team with resolve_user_identity=True",
+      "Slack(" in server_src and "team=route_team" in server_src and "resolve_user_identity=True" in server_src)
+check("P8 two interfaces are available (AG-UI + Slack when configured)",
+      server_src.count("interfaces.append(Slack(") == 1 and "AGUI(agent=" in server_src)
+check("P8 /webhooks/news route exists",
+      any(getattr(r, "path", "") == "/webhooks/news" for r in server.app.routes))
+check("P8 webhook runs the news agent", "news_agent.arun(" in server_src)
+check("P8 trace tables exist", sql("select count(*) from information_schema.tables where table_schema='ai' "
+                                   "and table_name in ('agno_traces','agno_spans')")[0][0] == 2)
+check("P8 Slack setup doc exists", os.path.exists("docs/slack_setup.md"))
+check("P8 runs on port 8000", "port=8000" in server_src)
+
 # ---------------- report ----------------
 w = max(len(n) for n, _, _ in RESULTS)
 for n, ok, note in RESULTS:

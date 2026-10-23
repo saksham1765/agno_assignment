@@ -4,7 +4,12 @@ version = "0.1.0"
 description = "Valura Agno multi-agent market intelligence"
 requires-python = ">=3.12"
 dependencies = [
-    "agno",
+    "agno[os,slack,agui]",
+    # FastAPI 0.160+ turns an omitted optional form field into False instead of None, which makes
+    # Agno's HTTP /continue (approve / reject a paused run) fail with a 400. Stay on 0.115.
+    "fastapi>=0.115,<0.116",
+    "uvicorn",
+    "httpx",
     "groq",
     "openai",  # client library only: LiteLLM proxy is OpenAI-compatible (no OpenAI key used)
     "yfinance",
