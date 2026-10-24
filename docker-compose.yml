@@ -18,5 +18,26 @@ services:
       timeout: 5s
       retries: 10
 
+  # Optional Phase 11 trace DB (docker compose --profile traces up -d)
+  trace_db:
+    profiles: ["traces"]
+    image: agnohq/pgvector:18
+    container_name: valura-trace-pg
+    environment:
+      POSTGRES_USER: ai
+      POSTGRES_PASSWORD: ai
+      POSTGRES_DB: ai
+      PGDATA: /var/lib/postgresql/18/docker
+    ports:
+      - "5533:5432"
+    volumes:
+      - trace_pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ai -d ai"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
 volumes:
   pgdata:
+  trace_pgdata:

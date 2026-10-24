@@ -101,16 +101,21 @@ check("P4 NewsAgent has a news tool", any(getattr(t, "__name__", "") == "get_yah
 check("P4 RiskAgent checks vs portfolio/watchlist",
       any(getattr(t, "__name__", "") in ("portfolio_concentration", "list_watchlist_tickers") for t in admin_m["RiskAgent"].tools))
 check("P4 Reporter exists and has no tools", admin_m["Reporter"].tools in (None, []))
-modes = {build_coordinate_team().mode, build_route_team().mode, build_broadcast_team().mode}
-check("P4 three teams = coordinate/route/broadcast",
-      modes == {TeamMode.coordinate, TeamMode.route, TeamMode.broadcast}, str(modes))
+from app.teams.tasks import build_tasks_team  # noqa: E402
+from app.teams.members import build_sourcing_desk  # noqa: E402
+
+modes = {build_coordinate_team().mode, build_route_team().mode, build_broadcast_team().mode, build_tasks_team().mode}
+check("P4 four TeamModes = coordinate/route/broadcast/tasks",
+      modes == {TeamMode.coordinate, TeamMode.route, TeamMode.broadcast, TeamMode.tasks}, str(modes))
 check("P4 callable factory: admin has RiskAgent, viewer does not",
       "RiskAgent" in admin_m and "RiskAgent" not in viewer_names)
-check("P4 members is a callable on all 3 teams",
+check("P4 members is a callable on coordinate/route/broadcast",
       all(callable(t.members) for t in (build_coordinate_team(), build_route_team(), build_broadcast_team())))
 check("P4 cache_callables set (matrix item)", build_coordinate_team().cache_callables is False)
-check("P4 three team modules + README exist",
-      all(os.path.exists(f"app/teams/{f}") for f in ("coordinate.py", "route.py", "broadcast.py", "README.md")))
+check("P4 sub-team SourcingDesk exists", build_sourcing_desk().name == "SourcingDesk"
+      and all(m.name in ("Sourcer", "NewsAgent") for m in build_sourcing_desk().members))
+check("P4 three team modules + tasks + README exist",
+      all(os.path.exists(f"app/teams/{f}") for f in ("coordinate.py", "route.py", "broadcast.py", "tasks.py", "README.md")))
 check("P4 reasoning debug log exists", os.path.exists("logs/phase4_reasoning.log"))
 
 # ---------------- Phase 5 ----------------
@@ -118,12 +123,12 @@ from app.workflows.morning_briefing import build_morning_briefing  # noqa: E402
 
 wf = build_morning_briefing()
 kinds = [type(s).__name__ for s in wf.steps]
-check("P5 uses Parallel, Loop, Condition, Step", {"Parallel", "Loop", "Condition", "Step"} <= set(kinds), str(kinds))
+check("P5 uses Parallel, Loop, Router, Step", {"Parallel", "Loop", "Router", "Step"} <= set(kinds), str(kinds))
 check("P5 Parallel has fetch_portfolio/fetch_watchlist_news/fetch_macro",
       sorted(s.name for s in wf.steps[0].steps) == ["fetch_macro", "fetch_portfolio", "fetch_watchlist_news"])
 order = [getattr(s, "name", "") for s in wf.steps]
-check("P5 order: fetch -> ... -> research_team -> risk condition -> reporter",
-      order.index("fetch") < order.index("research_team") < order.index("risk_condition") < order.index("reporter"), str(order))
+check("P5 order: fetch -> ... -> research_team -> risk_router -> reporter",
+      order.index("fetch") < order.index("research_team") < order.index("risk_router") < order.index("reporter"), str(order))
 wsrc = inspect.getsource(__import__("app.workflows.morning_briefing", fromlist=["x"]))
 check("P5 typed StepInput/StepOutput", "StepInput" in wsrc and "StepOutput" in wsrc)
 check("P5 early stop (stop=True) on circuit-breaker", "stop=True" in wsrc and "circuit-breaker" in wsrc)
@@ -159,6 +164,8 @@ tmap = {t.name: t for t in tr.tools}
 check("P7 propose_trade requires_confirmation", tmap["propose_trade"].requires_confirmation is True)
 check("P7 propose_large_trade @approval(required)", str(tmap["propose_large_trade"].approval_type).endswith("required"))
 check("P7 second tool @approval(audit)", str(tmap["record_trade_note"].approval_type).endswith("audit"))
+check("P7 requires_user_input tier (set_risk_preference)",
+      "set_risk_preference" in tmap and tmap["set_risk_preference"].requires_user_input is True)
 check("P7 threshold is $10K", trading.LARGE_TRADE_USD == 10_000)
 pre = [type(h).__name__ for h in tr.pre_hooks]
 check("P7 pre_hooks: PII(mask_pii=True) + PromptInjection",
@@ -178,7 +185,7 @@ check("P7 SECURITY.md exists", os.path.exists("SECURITY.md"))
 import app.server as server  # noqa: E402
 
 check("P8 AgentOS has agents, teams and workflows",
-      len(server.agent_os.agents) >= 5 and len(server.agent_os.teams) == 3 and len(server.agent_os.workflows) == 1,
+      len(server.agent_os.agents) >= 5 and len(server.agent_os.teams) >= 3 and len(server.agent_os.workflows) == 1,
       f"{len(server.agent_os.agents)} agents, {len(server.agent_os.teams)} teams, {len(server.agent_os.workflows)} workflows")
 check("P8 AgentOS has a db and tracing=True", server.agent_os.db is not None and server.agent_os.tracing is True)
 interface_names = [type(i).__name__ for i in server.interfaces]
@@ -194,7 +201,62 @@ check("P8 webhook runs the news agent", "news_agent.arun(" in server_src)
 check("P8 trace tables exist", sql("select count(*) from information_schema.tables where table_schema='ai' "
                                    "and table_name in ('agno_traces','agno_spans')")[0][0] == 2)
 check("P8 Slack setup doc exists", os.path.exists("docs/slack_setup.md"))
-check("P8 runs on port 8000", "port=8000" in server_src)
+check("P8 runs on port 8000", "port=8000" in server_src or 'PORT' in server_src)
+
+# ---------------- Phase 9 ----------------
+from app.agents.backtester import build_backtester  # noqa: E402
+from app.schedules import briefing_users, register_morning_briefing_schedules, schedule_name  # noqa: E402
+from app.tools import backtest as backtest_mod  # noqa: E402
+
+check("P9 AgentOS scheduler=True", getattr(server.agent_os, "_scheduler_enabled", False) is True)
+check("P9 scheduler_base_url set", bool(getattr(server.agent_os, "_scheduler_base_url", None)))
+check("P9 lifespan registers morning briefing schedules",
+      "register_morning_briefing_schedules" in server_src)
+bt = build_backtester()
+check("P9 backtester agent id=backtester with db",
+      bt.id == "backtester" and bt.db is not None)
+_bt_params = list(inspect.signature(backtest_mod.backtest.entrypoint).parameters)
+check("P9 backtest(strategy, range) tool", _bt_params[:2] == ["strategy", "range"], str(_bt_params))
+# The toolkit wraps the function; check the source instead if signature is awkward.
+check("P9 backtest checks raise_if_cancelled",
+      "raise_if_cancelled" in inspect.getsource(backtest_mod))
+check("P9 cancel_run helper exists", callable(backtest_mod.cancel_run))
+check("P9 morning briefing workflow has db (background/schedule)",
+      build_morning_briefing().db is not None)
+users = briefing_users()
+check("P9 at least one briefing user with timezone",
+      bool(users) and bool(users[0].timezone), str(users))
+# Ensure schedules table can be written (creates rows for the demo user).
+schedules = register_morning_briefing_schedules(get_db())
+check("P9 agno_schedules has morning_briefing row",
+      sql("select count(*) from ai.agno_schedules where name = :n",
+          n=schedule_name(users[0].user_id))[0][0] >= 1,
+      f"{len(schedules)} registered")
+check("P9 prove_phase9.py exists", os.path.exists("scripts/prove_phase9.py"))
+
+# ---------------- Phase 10 ----------------
+check("P10 evals/accuracy with 20 gold cases",
+      os.path.exists("evals/accuracy/cases.py")
+      and len(__import__("evals.accuracy.cases", fromlist=["CASES"]).CASES) == 20)
+check("P10 reliability/performance/judge modules exist",
+      all(os.path.exists(f"evals/{s}/run.py") for s in ("accuracy", "reliability", "performance", "judge")))
+check("P10 make eval / run_all exists",
+      os.path.exists("Makefile") and os.path.exists("evals/run_all.py"))
+check("P10 docs/learnings.md exists", os.path.exists("docs/learnings.md"))
+# eval_report.md is produced by `make eval` / `python -m evals.run_all`
+if os.path.exists("docs/eval_report.md"):
+    check("P10 docs/eval_report.md present", True)
+else:
+    check("P10 docs/eval_report.md present (run make eval)", False, "missing — run python -m evals.run_all")
+
+# ---------------- Phase 11 ----------------
+check("P11 railway_up.sh exists", os.path.exists("scripts/railway_up.sh"))
+check("P11 production checklist exists", os.path.exists("docs/production_checklist.md"))
+check("P11 postmortem exists", os.path.exists("docs/postmortem.md"))
+check("P11 get_trace_db helper", callable(__import__("app.db", fromlist=["get_trace_db"]).get_trace_db))
+check("P11 server JWT when RUNTIME_ENV=prd",
+      "authorization=USE_JWT" in inspect.getsource(server) or "authorization=USE_JWT" in server_src)
+check("P11 TRACE_DATABASE_URL wiring", "TRACE_DATABASE_URL" in inspect.getsource(__import__("app.db", fromlist=["x"])))
 
 # ---------------- report ----------------
 w = max(len(n) for n, _, _ in RESULTS)

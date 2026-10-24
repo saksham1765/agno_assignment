@@ -115,6 +115,22 @@ def record_trade_note(ticker: str, note: str) -> str:
     return f"Noted {ticker.upper()}: {note}"
 
 
+@tool(requires_user_input=True, user_input_fields=["risk_tolerance"])
+def set_risk_preference(run_context: RunContext, risk_tolerance: str = "") -> str:
+    """Ask the user for their risk tolerance, then save it (HITL tier: requires_user_input).
+
+    Args:
+        risk_tolerance: Filled in by the user when the run pauses (e.g. conservative / moderate / aggressive).
+    """
+    ensure_trade_tables()
+    value = (risk_tolerance or "").strip() or "unspecified"
+    run_sql(
+        "INSERT INTO ai.audit_log (user_id, action, detail) VALUES (:u, 'risk_preference', :d)",
+        u=who(run_context), d=value,
+    )
+    return f"Saved risk preference for {who(run_context)}: {value}"
+
+
 def route_trade_tool(notional_usd: float) -> str:
     """Which tool a trade of this size must use."""
     return "propose_large_trade" if notional_usd > LARGE_TRADE_USD else "propose_trade"

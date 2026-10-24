@@ -7,13 +7,20 @@ from app.agents.model import pick_model
 from app.db import get_db
 from app.hooks.audit import audit_run
 from app.hooks.guardrails import StrongerInjectionGuardrail, TickerPermissionGuardrail
-from app.tools.trading import ensure_trade_tables, propose_large_trade, propose_trade, record_trade_note
+from app.tools.trading import (
+    ensure_trade_tables,
+    propose_large_trade,
+    propose_trade,
+    record_trade_note,
+    set_risk_preference,
+)
 
 INSTRUCTIONS = [
     "You are Valura Trader. You never trade by yourself, you only PROPOSE trades.",
     "Trades up to $10,000: call propose_trade(ticker, side, qty).",
     "Trades above $10,000: call propose_large_trade(ticker, side, qty).",
     "Compliance notes: call record_trade_note(ticker, note).",
+    "If the user has not stated a risk preference, call set_risk_preference (it will ask them).",
     "Call a tool once, then report its result in one sentence.",
 ]
 
@@ -26,7 +33,7 @@ def build_trader(permitted_tickers: list[str]) -> Agent:
         name="Trader",
         model=pick_model(),
         db=get_db(),
-        tools=[propose_trade, propose_large_trade, record_trade_note],
+        tools=[propose_trade, propose_large_trade, record_trade_note, set_risk_preference],
         instructions=INSTRUCTIONS,
         pre_hooks=[
             PIIDetectionGuardrail(mask_pii=True),            # hide SSNs, cards, emails, phones

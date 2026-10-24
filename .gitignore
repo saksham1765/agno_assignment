@@ -18,3 +18,5 @@ LAST_OUTPUT.txt
 data/media/*.wav
 data/media/*.png
 data/media/*.pdf
+tools/ngrok/
+_pdf_extract.txt

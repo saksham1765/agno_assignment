@@ -10,12 +10,11 @@ Valura never moves money on its own. Every trade tool is gated by a human step.
 | 1. Confirmation | `@tool(requires_confirmation=True)` | The user, in the same session | `propose_trade` (notional up to $10K) | Nothing extra; run pauses, then `continue_run` |
 | 2. Required approval | `@approval(type="required")` + `requires_confirmation` | An **admin**, in the database | `propose_large_trade` (notional over $10K) | A `pending` row in `ai.agno_approvals`, resolved to `approved`/`rejected` by the admin |
 | 3. Audit | `@approval(type="audit")` + `requires_confirmation` | The user (no admin gate) | `record_trade_note` | An audit record in `ai.agno_approvals` after the user answers |
+| 4. User input | `@tool(requires_user_input=True, user_input_fields=[...])` | The user fills missing fields | `set_risk_preference` | Run pauses for form fields, then continues |
 
 Flow for tier 2: the run pauses and a pending approval is written. `app/agents/admin.py` plays the admin
 (it lists pending approvals and resolves them). Only after `approved` does `continue_run` execute the trade.
 A rejected approval means the tool never runs.
-
-`requires_user_input` (the third HITL primitive in the PDF) is not used by any trade tool here.
 
 ## Guardrails (`pre_hooks` on the Trader agent)
 

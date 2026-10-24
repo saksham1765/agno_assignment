@@ -15,8 +15,8 @@ load_dotenv()
 from app.agents.model import pick_model  # noqa: E402
 from app.agents.reporter import build_reporter  # noqa: E402
 from app.agents.sourcer import build_sourcer  # noqa: E402
-from app.teams import build_broadcast_team, build_coordinate_team, build_route_team  # noqa: E402
-from app.teams.members import members_for_role  # noqa: E402
+from app.teams import build_broadcast_team, build_coordinate_team, build_route_team, build_tasks_team  # noqa: E402
+from app.teams.members import build_sourcing_desk, members_for_role  # noqa: E402
 from app.tools.portfolio import ensure_portfolio_table  # noqa: E402
 
 LOG = Path("logs/phase4_reasoning.log")
@@ -93,10 +93,26 @@ def check_broadcast_uses_every_member():
 
 def check_tasks_mode():
     print("\n[6] Tasks mode (the fourth TeamMode) also works")
-    team = Team(name="TasksTeam", model=pick_model(), members=[build_sourcer(), build_reporter()],
-                mode=TeamMode.tasks, max_iterations=3)
-    response = team.run("In one sentence: what is Valura?")
+    response = build_tasks_team().run(
+        "In one sentence: what is Valura?",
+        session_state={"role": "viewer"},
+    )
     assert response.content
+    print("    [ok] TeamMode.tasks via build_tasks_team()")
+
+
+def check_sub_team():
+    print("\n[7] Sub-team: SourcingDesk nested inside a parent team")
+    parent = Team(
+        name="ParentWithSubTeam",
+        model=pick_model(),
+        members=[build_sourcing_desk(), build_reporter()],
+        mode=TeamMode.coordinate,
+        instructions=["Delegate news gathering to SourcingDesk, then ask Reporter to polish."],
+    )
+    response = parent.run("One NVDA headline, 30 words.")
+    assert response.content
+    print("    [ok] nested Team member ran:", who_ran(response) or {"(leader only)"})
 
 
 if __name__ == "__main__":
@@ -108,4 +124,5 @@ if __name__ == "__main__":
     check_route_uses_one_member()
     check_broadcast_uses_every_member()
     check_tasks_mode()
+    check_sub_team()
     print("\nPhase 4 checks passed")

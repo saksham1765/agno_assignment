@@ -4,7 +4,7 @@
       -> macro_gate           stops the workflow on a circuit-breaker
       -> Loop(analyze_ticker) one pass per ticker, so any portfolio size works
       -> research_team        puts the analysis together
-      -> Condition(any_red_flag) runs the RiskAgent step only if something is flagged
+      -> Router(risk)         runs RiskAgent only if something is flagged
       -> reporter             writes the Markdown, reading earlier steps by name
 
 By default it uses no LLM, so the same input always gives the same briefing.
@@ -13,7 +13,7 @@ Pass use_llm=True in session_state to use the real team and RiskAgent instead.
 
 import json
 
-from agno.workflow import Condition, Loop, Parallel, Step, StepInput, StepOutput, Workflow
+from agno.workflow import Loop, Parallel, Router, Step, StepInput, StepOutput, Workflow
 
 from app.workflows import data
 
@@ -42,7 +42,14 @@ def fetched(step_input: StepInput, step_name: str) -> dict:
 
 def fetch_portfolio(step_input: StepInput, run_context) -> StepOutput:
     data.simulate_io()
-    user_id = state(run_context).get("user_id", "demo@valura.dev")
+    memory = state(run_context)
+    memory["fetch_portfolio_calls"] = memory.get("fetch_portfolio_calls", 0) + 1
+    # Scheduled runs set user_id on the run; local demos put it in session_state.
+    user_id = (
+        memory.get("user_id")
+        or getattr(run_context, "user_id", None)
+        or "demo@valura.dev"
+    )
     return send({"positions": data.load_positions(user_id)})
 
 
@@ -74,11 +81,17 @@ def analyze_ticker(step_input: StepInput, run_context) -> StepOutput:
     memory = state(run_context)
     if "todo" not in memory:                            # first pass: build the to-do list
         held = [p["ticker"] for p in fetched(step_input, "fetch_portfolio")["positions"]]
-        watchlist = fetched(step_input, "fetch_watchlist_news")["watchlist"]
+        watchlist = fetched(step_input, "fetch_watchlist_news")["watchlist"] or list(data.DEFAULT_WATCHLIST)
         memory["held"] = held
         memory["todo"] = held + [t for t in watchlist if t not in held]
         memory["analysis"] = {}
+        # New users with no portfolio/watchlist still get a usable briefing.
+        if not memory["todo"]:
+            memory["todo"] = list(data.DEFAULT_WATCHLIST)
+            memory["held"] = []
 
+    if not memory["todo"]:
+        return send({"done": True})
     ticker = memory["todo"].pop(0)
     change = data.day_change_pct(ticker)
     is_held = ticker in memory["held"]
@@ -148,14 +161,63 @@ def reporter(step_input: StepInput, run_context) -> StepOutput:
 
     # When the Condition is skipped Agno fills in its own "skipped" text, so only
     # show the risk note if the RiskAgent step really ran.
-    risk_note = step_input.get_step_content("risk_condition") if state(run_context).get("risk_ran") else None
+    # Prefer Router output name when present; fall back to the older Condition name.
+    risk_note = None
+    if state(run_context).get("risk_ran"):
+        risk_note = (
+            step_input.get_step_content("risk_router")
+            or step_input.get_step_content("risk_condition")
+        )
     lines += ["", "## Risk", str(risk_note) if risk_note else "No red flags."]
-    return StepOutput(content="\n".join(lines))
+    # Actionable close + evidence section (Phase 10 judge: actionable / evidence-cited).
+    if state(run_context).get("risk_ran"):
+        lines += ["", "## Action", "Review red-flagged names before the open; size down if concentration is high."]
+    else:
+        lines += ["", "## Action", "No red flags — maintain current weights; re-check after the open."]
+    lines += [
+        "",
+        "## Sources",
+        "- Portfolio positions: Postgres `ai.portfolio`",
+        "- Day moves / watchlist news: workflow market stubs (deterministic Phase 5 data)",
+        f"- Risk threshold: day change <= {RED_FLAG_DROP_PCT}%",
+    ]
+    text = "\n".join(lines)
+
+    # Phase 9: optionally DM the briefing when Slack credentials + user mapping exist.
+    from app.schedules import maybe_post_slack_dm
+
+    user_id = (
+        state(run_context).get("user_id")
+        or getattr(run_context, "user_id", None)
+        or "demo@valura.dev"
+    )
+    slack_note = maybe_post_slack_dm(user_id, text)
+    if not slack_note.startswith("skipped"):
+        text = f"{text}\n\n_Slack DM: {slack_note}_"
+    return StepOutput(content=text)
+
+
+def skip_risk(step_input: StepInput, run_context) -> StepOutput:
+    state(run_context)["risk_ran"] = False
+    return StepOutput(content="No red flags — RiskAgent skipped.")
+
+
+_RISK_STEP = Step(name="risk_agent", executor=risk_agent_step)
+_SKIP_RISK_STEP = Step(name="skip_risk", executor=skip_risk)
+
+
+def select_risk_steps(step_input: StepInput):
+    """Router selector: run RiskAgent only when research marked a red flag."""
+    return [_RISK_STEP] if any_red_flag(step_input) else [_SKIP_RISK_STEP]
 
 
 def build_morning_briefing(name: str = "morning_briefing") -> Workflow:
+    from app.db import get_db
+
     return Workflow(
+        id=name,
         name=name,
+        db=get_db(),  # needed for scheduled / background workflow runs
         steps=[
             Parallel(
                 Step(name="fetch_portfolio", executor=fetch_portfolio),
@@ -167,8 +229,12 @@ def build_morning_briefing(name: str = "morning_briefing") -> Workflow:
             Loop(name="per_ticker_loop", steps=[Step(name="analyze_ticker", executor=analyze_ticker)],
                  end_condition=all_tickers_done, max_iterations=100),
             Step(name="research_team", executor=research_team),
-            Condition(name="risk_condition", evaluator=any_red_flag,
-                      steps=[Step(name="risk_agent", executor=risk_agent_step)]),
+            # Phase 5 matrix: Router (replaces a bare Condition for the risk branch).
+            Router(
+                name="risk_router",
+                choices=[_RISK_STEP, _SKIP_RISK_STEP],
+                selector=select_risk_steps,
+            ),
             Step(name="reporter", executor=reporter),
         ],
     )

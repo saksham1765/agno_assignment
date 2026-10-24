@@ -6,10 +6,12 @@ from app import server
 
 
 def test_server_has_everything_wired():
-    assert len(server.agent_os.teams) == 3
+    assert len(server.agent_os.teams) >= 3  # coordinate, route, broadcast, (+ tasks)
     assert len(server.agent_os.workflows) == 1
-    assert server.agent_os.tracing is True
+    # tracing=True unless TRACE_DATABASE_URL already called setup_tracing separately
+    assert server.agent_os.tracing is True or __import__("os").getenv("TRACE_DATABASE_URL")
     assert "AGUI" in [type(i).__name__ for i in server.interfaces]
+    assert any(a.id == "backtester" for a in server.agent_os.agents)
 
 
 def test_slack_is_off_without_credentials(monkeypatch):

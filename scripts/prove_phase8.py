@@ -64,7 +64,7 @@ def check_1_components():
     agents, teams, workflows = ids("agents"), ids("teams"), ids("workflows")
     print("    agents:", agents, "\n    teams:", teams, "\n    workflows:", workflows)
     assert {"chat", "news-agent", "trader"} <= set(agents)
-    assert len(teams) == 3 and len(workflows) == 1
+    assert len(teams) >= 3 and len(workflows) == 1
 
 
 def check_2_traces():
