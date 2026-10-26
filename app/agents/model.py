@@ -13,17 +13,23 @@ def has_llm_key() -> bool:
 
 
 def pick_model():
-    """LiteLLM if its key is set (and USE_LITELLM is not 0), otherwise Groq."""
+    """LiteLLM if its key is set (and USE_LITELLM is not 0), otherwise Groq.
+    
+    Set LITELLM_MODEL=smart (default). If smart is unavailable, swap
+    LITELLM_MODEL=cheap in Railway Variables (no code change needed).
+    """
     use_litellm = os.getenv("USE_LITELLM", "1").lower() not in ("0", "false", "no", "off")
 
     if os.getenv("LITELLM_API_KEY") and use_litellm:
         # The LiteLLM proxy speaks the OpenAI protocol, so Agno's OpenAIChat class talks to it.
         # No OpenAI account is involved: only the proxy's address and key are used.
         return OpenAIChat(
-            id=os.getenv("LITELLM_MODEL", "valura/claude-haiku-4-5-20251001"),
+            id=os.getenv("LITELLM_MODEL", "smart"),
             api_key=os.getenv("LITELLM_API_KEY"),
             base_url=os.getenv("LITELLM_BASE_URL", "https://litellm-infra.valura.ai"),
         )
+    if os.getenv("GROQ_API_KEY"):
+        return Groq(id=os.getenv("GROQ_MODEL", "openai/gpt-oss-20b"))
     if os.getenv("GROQ_API_KEY"):
         return Groq(id=os.getenv("GROQ_MODEL", "openai/gpt-oss-20b"))
 
