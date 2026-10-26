@@ -32,9 +32,9 @@ Every command prints its checks and ends with `... checks passed`.
 | 8 | AgentOS server: UI, traces, AG-UI chat, Slack, `/webhooks/news` | `python -m app.server`, then `python scripts/prove_phase8.py` |
 | 9 | Scheduler (06:00 briefing), background backtest, cancel_run | `python -m app.server`, then `python scripts/prove_phase9.py` |
 | 10 | Four eval suites → `docs/eval_report.md` | `make eval` or `python -m evals.run_all` |
-| 11 | JWT / trace_db / Railway script / postmortem | see `docs/production_checklist.md`, `scripts/railway_up.sh` |
+| 11 | JWT / trace_db / production docs / postmortem | see `docs/production_checklist.md`, `docs/postmortem.md` |
 
-There is **no Phase 12** in the PDF (phases end at 11). Submission extras are `docs/learnings.md`, `docs/postmortem.md`, Loom, and a live Railway URL.
+There is **no Phase 12** in the PDF (phases end at 11). Submission extras are `docs/learnings.md`, `docs/postmortem.md`, and a Loom walkthrough.
 
 Use `python` as `.\.venv\Scripts\python.exe` if the venv is not active.
 
@@ -53,7 +53,7 @@ python -m app.server        # http://localhost:8000   (docs at /docs)
 - **Scheduler:** on startup registers a `0 6 * * *` cron per user (see `MORNING_BRIEFING_USERS`) that hits `/workflows/morning_briefing/runs`. Rows live in `ai.agno_schedules` and survive restart.
 - **Background backtest:** `POST /agents/backtester/runs` with `background=true` returns a `run_id` immediately; poll `GET /agents/backtester/runs/{run_id}` or cancel with `POST .../cancel?session_id=...`.
 - **Evals:** `make eval` runs accuracy / reliability / performance / agent-as-judge and writes `docs/eval_report.md`.
-- **Prod:** `RUNTIME_ENV=prd` + `JWT_VERIFICATION_KEY` enables JWT; optional `TRACE_DATABASE_URL` (compose profile `traces` on port 5533). Deploy: `bash scripts/railway_up.sh`.
+- **Prod:** `RUNTIME_ENV=prd` + `JWT_VERIFICATION_KEY` enables JWT; optional `TRACE_DATABASE_URL` (compose profile `traces` on port 5533).
 
 ## Extra checks
 
@@ -98,5 +98,5 @@ SECURITY.md      the three human-in-the-loop tiers
 | `requires_user_input` HITL tier | Not used | The Phase 7 tasks only need confirmation and `@approval`. |
 | Slack against a real bot, AgentOS UI at os.agno.com (Phase 8) | Code and docs are ready; only tested with a signed fake Slack event and a local server | Needs your Slack workspace and a browser. See `docs/slack_setup.md`. |
 | Post morning briefing to Slack DM at 06:00 (Phase 9) | Cron + workflow + optional `chat.postMessage` are wired; DM is skipped without credentials | Set `SLACK_TOKEN` and `MORNING_BRIEFING_USERS=you@email:Your/Timezone:U…` |
-| Deploy to Railway + Loom (Phase 11) | `scripts/railway_up.sh`, checklist, postmortem committed | Needs your Railway login, JWT public key, Slack Event URL, Loom recording |
+| Local prod deploy + Loom (Phase 11) | production checklist, postmortem committed | Needs JWT public key, Slack Event URL, Loom recording |
 | `fastapi dev` (Phase 8) | `python -m app.server` | Same server; the `fastapi` command also works. FastAPI is pinned to 0.115 because newer versions break Agno's approve/reject endpoint. |

@@ -250,7 +250,6 @@ else:
     check("P10 docs/eval_report.md present (run make eval)", False, "missing — run python -m evals.run_all")
 
 # ---------------- Phase 11 ----------------
-check("P11 railway_up.sh exists", os.path.exists("scripts/railway_up.sh"))
 check("P11 production checklist exists", os.path.exists("docs/production_checklist.md"))
 check("P11 postmortem exists", os.path.exists("docs/postmortem.md"))
 check("P11 get_trace_db helper", callable(__import__("app.db", fromlist=["get_trace_db"]).get_trace_db))

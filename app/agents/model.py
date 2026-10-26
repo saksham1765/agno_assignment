@@ -16,7 +16,7 @@ def pick_model():
     """LiteLLM if its key is set (and USE_LITELLM is not 0), otherwise Groq.
     
     Set LITELLM_MODEL=smart (default). If smart is unavailable, swap
-    LITELLM_MODEL=cheap in Railway Variables (no code change needed).
+    LITELLM_MODEL=cheap in .env (no code change needed).
     """
     use_litellm = os.getenv("USE_LITELLM", "1").lower() not in ("0", "false", "no", "off")
 
